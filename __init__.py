@@ -20,13 +20,16 @@ def send_discord_message(webhook_url, message):
 
 # ----------- タイマーループ関数 -----------
 def notifier_timer():
-    scene = bpy.context.scene
-    props = scene.discord_notifier_props
+    try:
+        props = bpy.context.scene.discord_notifier_props
+        if props.enabled and props.webhook_url:
+            send_discord_message(props.webhook_url, props.message)
+            return props.interval * 60.0  # 分→秒
+        return 30.0  # 無効な場合も周期的に再チェック
+    except Exception as e:
+        print(f"⏱ タイマー実行エラー: {e}")
+        return None  # エラー時は終了
 
-    if props.enabled and props.webhook_url:
-        send_discord_message(props.webhook_url, props.message)
-        return props.interval * 60  # 次の通知までの秒数
-    return None  # タイマー停止
 
 # ----------- プロパティ定義 -----------
 class DiscordNotifierProperties(bpy.types.PropertyGroup):
