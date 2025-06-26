@@ -11,27 +11,36 @@ bl_info = {
 import bpy
 import requests
 
-# ----------- 通知送信関数 -----------
-def send_discord_message(webhook_url, message):
+# ----------- 通知送信関数（ログ付き）-----------
+def send_discord_message(webhook_url, message, props=None):
     try:
-        requests.post(webhook_url, json={"content": message})
+        response = requests.post(webhook_url, json={"content": message})
+        if response.ok:
+            log = "✅ Discord通知成功"
+        else:
+            log = f"⚠️ Discord通知失敗: ステータス {response.status_code}"
     except Exception as e:
-        print(f"❌ Discord通知エラー: {e}")
+        log = f"❌ Discord通知エラー: {e}"
 
-# ----------- タイマーループ関数 -----------
+    print(log)
+    if props:
+        props.log_message = log
+
+
+# ----------- タイマーループ関数（ログ対応）-----------
 def notifier_timer():
     try:
         props = bpy.context.scene.discord_notifier_props
         if props.enabled and props.webhook_url:
-            send_discord_message(props.webhook_url, props.message)
-            return props.interval * 60.0  # 分→秒
-        return 30.0  # 無効な場合も周期的に再チェック
+            send_discord_message(props.webhook_url, props.message, props)
+            return props.interval * 60.0
+        return 60.0
     except Exception as e:
         print(f"⏱ タイマー実行エラー: {e}")
-        return None  # エラー時は終了
+        return 60.0
 
 
-# ----------- プロパティ定義 -----------
+# ----------- プロパティ定義（ログプロパティ追加）-----------
 class DiscordNotifierProperties(bpy.types.PropertyGroup):
     webhook_url: bpy.props.StringProperty(
         name="Discord Webhook URL",
@@ -51,6 +60,12 @@ class DiscordNotifierProperties(bpy.types.PropertyGroup):
         name="通知を有効にする",
         default=False
     )
+    log_message: bpy.props.StringProperty(
+        name="ログメッセージ",
+        default="",
+        options={'SKIP_SAVE'}
+    )
+
 
 # ----------- UIパネル -----------
 class DISCORDNOTIFIER_PT_panel(bpy.types.Panel):
@@ -70,6 +85,11 @@ class DISCORDNOTIFIER_PT_panel(bpy.types.Panel):
         layout.prop(props, "message")
         layout.operator("discord.send_now", text="今すぐ通知")
 
+        if props.log_message:
+            layout.label(text="ログ:")
+            layout.label(text=props.log_message)
+
+
 # ----------- 即時通知ボタン -----------
 class DISCORDNOTIFIER_OT_send_now(bpy.types.Operator):
     bl_idname = "discord.send_now"
@@ -77,9 +97,10 @@ class DISCORDNOTIFIER_OT_send_now(bpy.types.Operator):
 
     def execute(self, context):
         props = context.scene.discord_notifier_props
-        send_discord_message(props.webhook_url, props.message)
+        send_discord_message(props.webhook_url, props.message, props)
         self.report({'INFO'}, "通知を送信しました")
         return {'FINISHED'}
+
 
 # ----------- 登録処理 -----------
 classes = (
